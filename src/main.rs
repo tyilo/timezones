@@ -35,6 +35,48 @@ fn list_timezones() {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Hash)]
+struct AllDateTimesTheSameKey {
+    first_offset: Offset,
+    transitions: Vec<(Timestamp, Offset)>,
+}
+
+impl AllDateTimesTheSameKey {
+    fn new(tz: &TimeZone) -> Self {
+        let mut transitions = Vec::new();
+        for transition in tz.following(Timestamp::MIN) {
+            transitions.push((transition.timestamp(), transition.offset()));
+        }
+        Self {
+            first_offset: tz.to_offset(Timestamp::MIN),
+            transitions,
+        }
+    }
+}
+
+fn list_timezones_with_same_datetimes() {
+    use std::collections::HashMap;
+
+    let mut seen: HashMap<AllDateTimesTheSameKey, Vec<String>> = HashMap::new();
+    for name in tz::db().available() {
+        let key = AllDateTimesTheSameKey::new(&TimeZone::get(name.as_str()).unwrap());
+        seen.entry(key).or_default().push(name.to_string());
+    }
+    for (key, names) in seen {
+        if names.len() > 1 {
+            println!(
+                "{} timezones with the same datetimes ({} transitions):",
+                names.len(),
+                key.transitions.len()
+            );
+            for name in names {
+                println!("  {name}");
+            }
+            println!();
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Display)]
 enum TransitionType {
     #[display("DST forward")]
@@ -257,6 +299,7 @@ impl TimeZones {
 #[derive(Subcommand)]
 enum Command {
     List,
+    ListSameDateTimes,
     ListNonMonoticTransitions,
     Dst(TimeZones),
 }
@@ -266,6 +309,7 @@ fn main() -> Result<()> {
 
     match args.command {
         Command::List => list_timezones(),
+        Command::ListSameDateTimes => list_timezones_with_same_datetimes(),
         Command::ListNonMonoticTransitions => list_non_monotic_transitions()?,
         Command::Dst(timezones) => {
             let timezones = timezones.get();
